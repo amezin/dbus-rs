@@ -74,6 +74,7 @@ use std::{fmt, mem, ptr, error};
 use crate::{ffi, Message, Signature, Path};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_void, c_int};
+#[cfg(unix)]
 use std::os::unix::io::{RawFd, AsRawFd, FromRawFd, IntoRawFd};
 use std::collections::VecDeque;
 
@@ -86,11 +87,13 @@ fn ffi_iter() -> ffi::DBusMessageIter {
 
 /// An RAII wrapper around Fd to ensure that file descriptor is closed
 /// when the scope ends.
+#[cfg(unix)]
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct OwnedFd {
     fd: RawFd
 }
 
+#[cfg(unix)]
 impl OwnedFd {
     /// Create a new OwnedFd from a RawFd.
     ///
@@ -108,12 +111,14 @@ impl OwnedFd {
     }
 }
 
+#[cfg(unix)]
 impl Drop for OwnedFd {
     fn drop(&mut self) {
         unsafe { libc::close(self.fd); }
     }
 }
 
+#[cfg(unix)]
 impl Clone for OwnedFd {
     fn clone(&self) -> OwnedFd {
         let x = unsafe { libc::dup(self.fd) };
@@ -122,18 +127,21 @@ impl Clone for OwnedFd {
     }
 }
 
+#[cfg(unix)]
 impl AsRawFd for OwnedFd {
     fn as_raw_fd(&self) -> RawFd {
         self.fd
     }
 }
 
+#[cfg(unix)]
 impl IntoRawFd for OwnedFd {
     fn into_raw_fd(self) -> RawFd {
         self.into_fd()
     }
 }
 
+#[cfg(unix)]
 impl FromRawFd for OwnedFd {
     unsafe fn from_raw_fd(fd: RawFd) -> Self { OwnedFd::new(fd) }
 }
@@ -262,6 +270,7 @@ impl<'a> Iter<'a> {
             ArgType::Int64 => Box::new(self.get::<i64>().unwrap()),
             ArgType::UInt64 => Box::new(self.get::<u64>().unwrap()),
             ArgType::Double => Box::new(self.get::<f64>().unwrap()),
+            #[cfg(unix)]
             ArgType::UnixFd => Box::new(self.get::<std::fs::File>().unwrap()),
             ArgType::Struct => Box::new(self.recurse(ArgType::Struct).unwrap().collect::<VecDeque<_>>()),
             ArgType::ObjectPath => Box::new(self.get::<Path>().unwrap().into_static()),
@@ -405,6 +414,7 @@ pub enum ArgType {
     /// f64
     Double = ffi::DBUS_TYPE_DOUBLE as u8,
     /// File
+    #[cfg(unix)]
     UnixFd = ffi::DBUS_TYPE_UNIX_FD as u8,
     /// Use tuples or Vec<Box<dyn RefArg>> to read/write structs.
     Struct = ffi::DBUS_TYPE_STRUCT as u8,
@@ -414,7 +424,7 @@ pub enum ArgType {
     Signature = ffi::DBUS_TYPE_SIGNATURE as u8,
 }
 
-const ALL_ARG_TYPES: [(ArgType, &str); 18] =
+const ALL_ARG_TYPES: [(ArgType, &str); if cfg!(unix) { 18 } else { 17 }] =
     [(ArgType::Variant, "Variant"),
     (ArgType::Array, "Array/Dict"),
     (ArgType::Struct, "Struct"),
@@ -422,6 +432,7 @@ const ALL_ARG_TYPES: [(ArgType, &str); 18] =
     (ArgType::DictEntry, "Dict entry"),
     (ArgType::ObjectPath, "Path"),
     (ArgType::Signature, "Signature"),
+    #[cfg(unix)]
     (ArgType::UnixFd, "File"),
     (ArgType::Boolean, "bool"),
     (ArgType::Byte, "u8"),

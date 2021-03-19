@@ -9,7 +9,9 @@
 use crate::strings::{Signature, Path, Interface, BusName};
 
 use crate::arg;
-use crate::arg::{Iter, IterAppend, Arg, ArgType, OwnedFd};
+use crate::arg::{Iter, IterAppend, Arg, ArgType};
+#[cfg(unix)]
+use crate::arg::OwnedFd;
 use std::ffi::CStr;
 use std::{ops, any};
 
@@ -181,6 +183,7 @@ pub enum MessageItem {
     Double(f64),
     /// D-Bus allows for sending file descriptors, which can be used to
     /// set up SHM, unix pipes, or other communication channels.
+    #[cfg(unix)]
     UnixFd(OwnedFd),
 }
 
@@ -205,6 +208,7 @@ impl MessageItem {
             MessageItem::Dict(ref a) => a.sig.clone(),
             MessageItem::ObjectPath(_) => <Path as Arg>::signature(),
             MessageItem::Signature(_) => <Signature as Arg>::signature(),
+            #[cfg(unix)]
             MessageItem::UnixFd(_) => <std::fs::File as Arg>::signature(),
         }
     }
@@ -228,6 +232,7 @@ impl MessageItem {
             MessageItem::Dict(_) => ArgType::Array,
             MessageItem::ObjectPath(_) => ArgType::ObjectPath,
             MessageItem::Signature(_) => ArgType::Signature,
+            #[cfg(unix)]
             MessageItem::UnixFd(_) => ArgType::UnixFd,
         }
     }
@@ -374,6 +379,7 @@ impl From<Path<'static>> for MessageItem { fn from(i: Path<'static>) -> MessageI
 
 impl From<Signature<'static>> for MessageItem { fn from(i: Signature<'static>) -> MessageItem { MessageItem::Signature(i) } }
 
+#[cfg(unix)]
 impl From<OwnedFd> for MessageItem { fn from(i: OwnedFd) -> MessageItem { MessageItem::UnixFd(i) } }
 
 /// Create a `MessageItem::Variant`
@@ -429,6 +435,7 @@ impl<'a> TryFrom<&'a MessageItem> for &'a [MessageItem] {
     fn try_from(i: &'a MessageItem) -> Result<&'a [MessageItem],()> { i.inner::<&Vec<MessageItem>>().map(|s| &**s) }
 }
 
+#[cfg(unix)]
 impl<'a> TryFrom<&'a MessageItem> for &'a OwnedFd {
     type Error = ();
     fn try_from(i: &'a MessageItem) -> Result<&'a OwnedFd,()> { if let MessageItem::UnixFd(ref b) = i { Ok(b) } else { Err(()) } }
@@ -465,6 +472,7 @@ impl arg::Append for MessageItem {
             MessageItem::Dict(a) => a.append_by_ref(i),
             MessageItem::ObjectPath(a) => a.append_by_ref(i),
             MessageItem::Signature(a) => a.append_by_ref(i),
+            #[cfg(unix)]
             MessageItem::UnixFd(a) => a.append_by_ref(i),
         }
     }
@@ -508,6 +516,7 @@ impl<'a> arg::Get<'a> for MessageItem {
             ArgType::Int64 => MessageItem::Int64(i.get::<i64>().unwrap()),
             ArgType::UInt64 => MessageItem::UInt64(i.get::<u64>().unwrap()),
             ArgType::Double => MessageItem::Double(i.get::<f64>().unwrap()),
+            #[cfg(unix)]
             ArgType::UnixFd => MessageItem::UnixFd(i.get::<OwnedFd>().unwrap()),
             ArgType::Struct => MessageItem::Struct({
                 let mut s = i.recurse(ArgType::Struct).unwrap();
@@ -661,8 +670,10 @@ mod test {
     extern crate tempfile;
 
     use crate::{Message, MessageType, Path, Signature};
+    #[cfg(unix)]
     use libc;
     use crate::arg::messageitem::MessageItem;
+    #[cfg(unix)]
     use crate::arg::OwnedFd;
     use crate::ffidisp::{Connection, BusType};
 
@@ -671,6 +682,7 @@ mod test {
         use std::io::prelude::*;
         use std::io::SeekFrom;
         use std::fs::OpenOptions;
+        #[cfg(unix)]
         use std::os::unix::io::{IntoRawFd, AsRawFd};
 
         let c = Connection::get_private(BusType::Session).unwrap();
@@ -683,18 +695,24 @@ mod test {
         let mut file = OpenOptions::new().create(true).read(true).write(true).open(&filename).unwrap();
         file.write_all(b"z").unwrap();
         file.seek(SeekFrom::Start(0)).unwrap();
-        let ofd = unsafe { OwnedFd::new(file.into_raw_fd()) };
-        m.append_items(&[MessageItem::UnixFd(ofd.clone())]);
+        #[cfg(unix)]
+        {
+            let ofd = unsafe { OwnedFd::new(file.into_raw_fd()) };
+            m.append_items(&[MessageItem::UnixFd(ofd.clone())]);
+        }
         println!("Sending {:?}", m.get_items());
         c.send(m).unwrap();
 
         loop { for n in c.incoming(1000) {
             if n.msg_type() == MessageType::MethodCall {
-                let z: OwnedFd = n.read1().unwrap();
-                println!("Got {:?}", z);
-                let mut q: libc::c_char = 100;
-                assert_eq!(1, unsafe { libc::read(z.as_raw_fd(), &mut q as *mut _ as *mut libc::c_void, 1) });
-                assert_eq!(q, 'z' as libc::c_char);
+                #[cfg(unix)]
+                {
+                    let z: OwnedFd = n.read1().unwrap();
+                    println!("Got {:?}", z);
+                    let mut q: libc::c_char = 100;
+                    assert_eq!(1, unsafe { libc::read(z.as_raw_fd(), &mut q as *mut _ as *mut libc::c_void, 1) });
+                    assert_eq!(q, 'z' as libc::c_char);
+                }
                 return;
             } else {
                 println!("Got {:?}", n);
@@ -807,6 +825,7 @@ mod test {
     }
 
     /* Unfortunately org.freedesktop.DBus has no properties we can use for testing, but hostname1 should be around on most distros. */
+    #[cfg(unix)]
     #[test]
     fn test_get_hostname1_prop() {
         use super::Props;

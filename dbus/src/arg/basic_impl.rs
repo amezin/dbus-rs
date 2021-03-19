@@ -5,6 +5,7 @@ use crate::strings::{Signature, Path, Member, ErrorName, Interface};
 use std::{ptr, any, mem};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_char, c_int};
+#[cfg(unix)]
 use std::fs::File;
 
 
@@ -225,40 +226,50 @@ impl<'a> Get<'a> for &'a CStr {
     fn get(i: &mut Iter<'a>) -> Option<&'a CStr> { unsafe { arg_get_str(&mut i.0, Self::ARG_TYPE) }}
 }
 
+#[cfg(unix)]
 impl Arg for OwnedFd {
     const ARG_TYPE: ArgType = ArgType::UnixFd;
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked("h\0") } }
 }
+#[cfg(unix)]
 impl Append for OwnedFd {
     fn append_by_ref(&self, i: &mut IterAppend) {
         arg_append_basic(&mut i.0, ArgType::UnixFd, self.as_raw_fd())
     }
 }
+#[cfg(unix)]
 impl DictKey for OwnedFd {}
+#[cfg(unix)]
 impl<'a> Get<'a> for OwnedFd {
     fn get(i: &mut Iter) -> Option<Self> {
         arg_get_basic(&mut i.0, ArgType::UnixFd).map(|fd| unsafe { OwnedFd::new(fd) })
     }
 }
 
+#[cfg(unix)]
 refarg_impl!(OwnedFd, _i, { use std::os::unix::io::AsRawFd; Some(_i.as_raw_fd() as i64) }, None, None, None);
 
+#[cfg(unix)]
 impl Arg for File {
     const ARG_TYPE: ArgType = ArgType::UnixFd;
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked("h\0") } }
 }
+#[cfg(unix)]
 impl Append for File {
     fn append_by_ref(&self, i: &mut IterAppend) {
         arg_append_basic(&mut i.0, ArgType::UnixFd, self.as_raw_fd())
     }
 }
+#[cfg(unix)]
 impl DictKey for File {}
+#[cfg(unix)]
 impl<'a> Get<'a> for File {
     fn get(i: &mut Iter) -> Option<Self> {
         arg_get_basic(&mut i.0, ArgType::UnixFd).map(|fd| unsafe { File::from_raw_fd(fd) })
     }
 }
 
+#[cfg(unix)]
 impl RefArg for File {
     #[inline]
     fn arg_type(&self) -> ArgType { <File as Arg>::ARG_TYPE }
