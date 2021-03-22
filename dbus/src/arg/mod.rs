@@ -87,9 +87,9 @@ fn ffi_iter() -> ffi::DBusMessageIter {
 
 /// An RAII wrapper around Fd to ensure that file descriptor is closed
 /// when the scope ends.
-#[cfg(unix)]
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct OwnedFd {
+    #[cfg(unix)]
     fd: RawFd
 }
 
@@ -118,12 +118,17 @@ impl Drop for OwnedFd {
     }
 }
 
-#[cfg(unix)]
 impl Clone for OwnedFd {
+    #[cfg(unix)]
     fn clone(&self) -> OwnedFd {
         let x = unsafe { libc::dup(self.fd) };
         if x == -1 { panic!("Duplicating file descriptor failed") }
         unsafe { OwnedFd::new(x) }
+    }
+
+    #[cfg(windows)]
+    fn clone(&self) -> OwnedFd {
+        OwnedFd {}
     }
 }
 
@@ -270,7 +275,6 @@ impl<'a> Iter<'a> {
             ArgType::Int64 => Box::new(self.get::<i64>().unwrap()),
             ArgType::UInt64 => Box::new(self.get::<u64>().unwrap()),
             ArgType::Double => Box::new(self.get::<f64>().unwrap()),
-            #[cfg(unix)]
             ArgType::UnixFd => Box::new(self.get::<std::fs::File>().unwrap()),
             ArgType::Struct => Box::new(self.recurse(ArgType::Struct).unwrap().collect::<VecDeque<_>>()),
             ArgType::ObjectPath => Box::new(self.get::<Path>().unwrap().into_static()),
@@ -414,7 +418,6 @@ pub enum ArgType {
     /// f64
     Double = ffi::DBUS_TYPE_DOUBLE as u8,
     /// File
-    #[cfg(unix)]
     UnixFd = ffi::DBUS_TYPE_UNIX_FD as u8,
     /// Use tuples or Vec<Box<dyn RefArg>> to read/write structs.
     Struct = ffi::DBUS_TYPE_STRUCT as u8,
@@ -424,7 +427,7 @@ pub enum ArgType {
     Signature = ffi::DBUS_TYPE_SIGNATURE as u8,
 }
 
-const ALL_ARG_TYPES: [(ArgType, &str); if cfg!(unix) { 18 } else { 17 }] =
+const ALL_ARG_TYPES: [(ArgType, &str); 18] =
     [(ArgType::Variant, "Variant"),
     (ArgType::Array, "Array/Dict"),
     (ArgType::Struct, "Struct"),
@@ -432,7 +435,6 @@ const ALL_ARG_TYPES: [(ArgType, &str); if cfg!(unix) { 18 } else { 17 }] =
     (ArgType::DictEntry, "Dict entry"),
     (ArgType::ObjectPath, "Path"),
     (ArgType::Signature, "Signature"),
-    #[cfg(unix)]
     (ArgType::UnixFd, "File"),
     (ArgType::Boolean, "bool"),
     (ArgType::Byte, "u8"),

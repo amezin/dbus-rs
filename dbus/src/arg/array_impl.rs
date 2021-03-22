@@ -509,10 +509,9 @@ where
         | ArgType::ObjectPath
         | ArgType::Signature
         | ArgType::Boolean
+        | ArgType::UnixFd
         | ArgType::Array
         | ArgType::Struct => get_internal_dict_refarg::<K, KF>(i, kf),
-        #[cfg(unix)]
-        ArgType::UnixFd => get_internal_dict_refarg::<K, KF>(i, kf),
         ArgType::DictEntry => panic!("Can't have DictEntry as value for dictionary"),
         ArgType::Invalid => panic!("Array with invalid dictvalue"),
     }
@@ -566,7 +565,6 @@ pub fn get_array_refarg(i: &mut Iter) -> Box<dyn RefArg> {
                 _ => panic!("Array with invalid dictkey ({:?})", key),
             }
         }
-        #[cfg(unix)]
         ArgType::UnixFd => get_var_array_refarg::<OwnedFd, _>(i, |si| si.get()),
         ArgType::Struct => get_internal_array(i),
     };

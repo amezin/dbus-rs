@@ -10,7 +10,6 @@ use crate::strings::{Signature, Path, Interface, BusName};
 
 use crate::arg;
 use crate::arg::{Iter, IterAppend, Arg, ArgType};
-#[cfg(unix)]
 use crate::arg::OwnedFd;
 use std::ffi::CStr;
 use std::{ops, any};
@@ -183,7 +182,6 @@ pub enum MessageItem {
     Double(f64),
     /// D-Bus allows for sending file descriptors, which can be used to
     /// set up SHM, unix pipes, or other communication channels.
-    #[cfg(unix)]
     UnixFd(OwnedFd),
 }
 
@@ -208,7 +206,6 @@ impl MessageItem {
             MessageItem::Dict(ref a) => a.sig.clone(),
             MessageItem::ObjectPath(_) => <Path as Arg>::signature(),
             MessageItem::Signature(_) => <Signature as Arg>::signature(),
-            #[cfg(unix)]
             MessageItem::UnixFd(_) => <std::fs::File as Arg>::signature(),
         }
     }
@@ -232,7 +229,6 @@ impl MessageItem {
             MessageItem::Dict(_) => ArgType::Array,
             MessageItem::ObjectPath(_) => ArgType::ObjectPath,
             MessageItem::Signature(_) => ArgType::Signature,
-            #[cfg(unix)]
             MessageItem::UnixFd(_) => ArgType::UnixFd,
         }
     }
@@ -379,7 +375,6 @@ impl From<Path<'static>> for MessageItem { fn from(i: Path<'static>) -> MessageI
 
 impl From<Signature<'static>> for MessageItem { fn from(i: Signature<'static>) -> MessageItem { MessageItem::Signature(i) } }
 
-#[cfg(unix)]
 impl From<OwnedFd> for MessageItem { fn from(i: OwnedFd) -> MessageItem { MessageItem::UnixFd(i) } }
 
 /// Create a `MessageItem::Variant`
@@ -435,7 +430,6 @@ impl<'a> TryFrom<&'a MessageItem> for &'a [MessageItem] {
     fn try_from(i: &'a MessageItem) -> Result<&'a [MessageItem],()> { i.inner::<&Vec<MessageItem>>().map(|s| &**s) }
 }
 
-#[cfg(unix)]
 impl<'a> TryFrom<&'a MessageItem> for &'a OwnedFd {
     type Error = ();
     fn try_from(i: &'a MessageItem) -> Result<&'a OwnedFd,()> { if let MessageItem::UnixFd(ref b) = i { Ok(b) } else { Err(()) } }
@@ -472,7 +466,6 @@ impl arg::Append for MessageItem {
             MessageItem::Dict(a) => a.append_by_ref(i),
             MessageItem::ObjectPath(a) => a.append_by_ref(i),
             MessageItem::Signature(a) => a.append_by_ref(i),
-            #[cfg(unix)]
             MessageItem::UnixFd(a) => a.append_by_ref(i),
         }
     }
@@ -516,7 +509,6 @@ impl<'a> arg::Get<'a> for MessageItem {
             ArgType::Int64 => MessageItem::Int64(i.get::<i64>().unwrap()),
             ArgType::UInt64 => MessageItem::UInt64(i.get::<u64>().unwrap()),
             ArgType::Double => MessageItem::Double(i.get::<f64>().unwrap()),
-            #[cfg(unix)]
             ArgType::UnixFd => MessageItem::UnixFd(i.get::<OwnedFd>().unwrap()),
             ArgType::Struct => MessageItem::Struct({
                 let mut s = i.recurse(ArgType::Struct).unwrap();
